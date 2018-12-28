@@ -1,17 +1,12 @@
 package com.banno.totp
 
-//import cats.FlatMap
 import cats.effect._
+import cats.implicits._
 
 import scala.collection.mutable
-//import cats.effect.concurrent._
-//import cats.effect.implicits._
-import cats.implicits._
-import cats.effect.{Bracket, Resource}
-import com.banno.totp.Test.Pool.PoolData
-import cats.effect.concurrent._
 
 import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext._
 
 //semantic blocking example
 
@@ -25,9 +20,8 @@ trait CandyMachine[F[_]] {
 object CandyMachine {
   private[this] case class PersonWaiting[F[_]](cb: Either[Throwable, Candy[F]] => Unit)
 
-
-  //Candy store where the Candy Man will give candy away for free but you _must_ thank him.
-  //He won't hand out any more candy until you do
+  //Candy Man will give candy away for free but you _must_ thank him.
+  //He won't hand out anymore candy until you do
   def build[F[_]: Concurrent : Timer] =
     new CandyMachine[F] {
       private[this] var givingCandy: Boolean = false
@@ -91,6 +85,7 @@ object CandyMachineApp extends IOApp {
       firstCandy <- candyMachine.giveIt
       _          <- IO(println("Got the first Candy"))
 
+      //a thousand fibers can be started all waiting for a piece of candy, no threads blocked
       fibers     <- List.range(1,1000).traverse(_ => getCandyAndWaitBeforeThank[IO](candyMachine, 10 millis).start)
 
       _          <- IO(println("Initial 5 second wait before first thank..."))

@@ -28,13 +28,15 @@ object CrapIOLoopStuff {
 
         case Map(toMap, f) =>
           if (firstBind.isEmpty)
-            loop(toMap, Some(wrap(f)), mapStack)//.map(f)
+            loop(toMap, Some(wrap(f)), mapStack)
           else loop(toMap, Some(wrap(f)), firstBind.toList ::: mapStack)
 
         case Bind(toBind, f) =>
           if (firstBind.isEmpty)
-            loop(toBind, Some(f), mapStack)//.map(f)
+            loop(toBind, Some(f), mapStack)
           else loop(toBind, Some(f), firstBind.toList ::: mapStack)
+
+        //case
       }
     }
 
@@ -62,6 +64,7 @@ case class Pure[A](a: A) extends CrapIO[A]
 case class Delay[A](a: () => A) extends CrapIO[A]
 case class Map[A, B](cio: CrapIO[A], f: A => B) extends CrapIO[B]
 case class Bind[A, B](cio: CrapIO[A], f: A => CrapIO[B]) extends CrapIO[B]
+//case class Async[]
 
 //trait CrapIOApp {
 //  def run(): CrapIO[A]
