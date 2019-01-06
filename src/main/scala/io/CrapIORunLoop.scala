@@ -1,12 +1,7 @@
-package com.banno.crapIO
-
-import java.util.concurrent.locks.AbstractQueuedSynchronizer
-
-import cats.effect.IO
-
-import scala.annotation.tailrec
+package com.tbrown.io
 
 object CrapIOLoopStuff {
+  import Utils._
 
   private[this] def wrap[A, B](f: A => B): A => CrapIO[B] = (a: A) => CrapIO(f(a))
 
@@ -46,7 +41,7 @@ object CrapIOLoopStuff {
           else loop(toBind, Some(f), firstBind.toList ::: mapStack, cb)
 
         case Async(f) =>
-          f{
+          f {
             (res: Either[Throwable, Any]) => {
               val weird = res.right.get //should work for Right and Left, need to fix
               loop(CrapIO(weird), firstBind, mapStack, cb)
@@ -76,70 +71,4 @@ object CrapIOLoopStuff {
       case Left(t) => throw t
     }
   }
-
-  //taken straight from cats-effect, essentially allows us to block until the resource is returned
-  private final class OneShotLatch extends AbstractQueuedSynchronizer {
-    override protected def tryAcquireShared(ignored: Int): Int =
-      if (getState != 0) 1 else -1
-
-    override protected def tryReleaseShared(ignore: Int): Boolean = {
-      setState(1)
-      true
-    }
-  }
-}
-
-sealed trait CrapIO[+A] {
-  def unsafeRunSync(): A = CrapIOLoopStuff.unsafeRunLoop(this)
-
-  def map[B](f: A => B): CrapIO[B] =
-    Map(this, f)
-
-  def flatMap[B](f: A => CrapIO[B]): CrapIO[B] =
-    Bind(this, f)
-}
-
-object CrapIO {
-  def apply[A](a: => A): CrapIO[A] = Delay(() => a)
-
-  def async[A](cb: (Either[Throwable, A] => Unit) => Unit): CrapIO[A] =
-    Async(cb)
-
-  def never: CrapIO[Unit] = CrapIO.async(_ => ())
-}
-
-case class Pure[A](a: A) extends CrapIO[A]
-case class Delay[A](a: () => A) extends CrapIO[A]
-case class Map[A, B](cio: CrapIO[A], f: A => B) extends CrapIO[B]
-case class Bind[A, B](cio: CrapIO[A], f: A => CrapIO[B]) extends CrapIO[B]
-case class Async[A](cb: (Either[Throwable, A] => Unit) => Unit) extends CrapIO[A]
-
-object CrapIOApp extends App {
-//  val pure: CrapIO[String] = Pure("hello")
-//  val delay: CrapIO[Unit] = CrapIO(println("HI!"))
-//
-//  val mapped: CrapIO[Int] = CrapIO(1).map(_ + 1)
-//  println(pure)
-//  println(delay)
-//  println(mapped)
-//
-//  delay.unsafeRunSync()
-//  println(mapped.unsafeRunSync())
-//
-//
-//  val moreComplex = CrapIO(1).map(_ + 1).map(_ * 5).map(_ / 2).map(_ * 100)
-//  println(moreComplex.unsafeRunSync())
-
-  println(CrapIO.never.unsafeRunSync())
-
-//  val result = for {
-//    _ <- CrapIO(println("Starting!"))
-//    _ <- CrapIO(println("Well here we are..."))
-//    x <- CrapIO(5)
-//    y <- CrapIO(1)
-//    _ <- CrapIO(println("Just nonsense"))
-//    z <- CrapIO(100)
-//  } yield (x + y) * z
-//
-//  println(result.unsafeRunSync())
 }
