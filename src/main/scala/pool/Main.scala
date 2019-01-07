@@ -57,7 +57,7 @@ object QueueBackedPool {
 
       poolState.set(
         state.copy(
-          cached = state.cached.filterKeys(_ === key),
+          cached = state.cached.filterKeys(_ === key), //we only want to remove the key if there was only one resource as a value
           allocated = allocatedUpdated))
     }
 
@@ -70,6 +70,7 @@ object QueueBackedPool {
     maxInstances: Long,
     factory: Key => Resource[F, A],
     reset: A => F[Boolean],
+    recylable: A => F[Boolean],
     stillUsable: A => F[Boolean] //function that allows us to check if a given A is still usable or if we should remove and grab new
   )(implicit F: Concurrent[F]): F[Pool[F, A]] =
     for {
@@ -125,9 +126,10 @@ object QueueBackedPool {
 
         pool.get.flatMap { state =>
           c match {
-            case Some(r) => stillUsable(r.value).ifM(
-              ifTrue = F.delay(cb(Right(r))),
-              ifFalse = removeResource(key, pool) >> handleMaybeLeak(key, pool, c, cb))
+            case Some(r) =>
+              stillUsable(r.value).ifM(
+                ifTrue = F.delay(cb(Right(r))),
+                ifFalse = removeResource(key, pool) >> handleMaybeLeak(key, pool, c, cb))
 
             case None if numConnectionsCheckHolds(key, state) => leakResource(key, pool, cb)
 
@@ -182,16 +184,22 @@ object QueueBackedPool {
           pool.set(state.copy(waiting = Waiting(key, callback, Instant.now()) :: state.waiting))
         }
 
-//      private def release(leak: Leak[F, A], pool: Ref[F, PoolState[F, Key, A]]): F[Unit] =
-//        semaphore.withPermit {
-//          pool.get.flatMap { state =>
-//            stillUsable(leak.value).attempt.flatMap {
-//              case Right(true) => pool.set(state.copy(cached = leak :: state.cached)) *> semaphore.release
-//              case Right(false) => ??? //cache.put(q) *> semaphore.release *> leak.release.attempt.void
-//              case Left(e) => ??? //cache.put(q) *> semaphore.release *> leak.release.attempt.void *> Concurrent[F].raiseError(e)
-//            }
-//          }
-//        }
+      private def release(key: Key, leak: Leak[F, A], pool: Ref[F, PoolState[F, Key, A]]): F[Unit] =
+        semaphore.withPermit {
+          pool.get.flatMap { state =>
+            stillUsable(leak.value).attempt.flatMap {
+              case Right(true) => pool.set {
+                val updated = state.cached.getOrElse(key, Queue.empty)
+                state.copy(cached = state.cached + (key -> updated.enqueue(leak)))
+              } *> semaphore.release //recycle to first waiter who can use the recycled resource
+              case Right(false) => removeResource(key, pool)
+                //find first allowed waiter...
+
+              //cache.put(q) *> semaphore.release *> leak.release.attempt.void
+              case Left(e) => ??? //cache.put(q) *> semaphore.release *> leak.release.attempt.void *> Concurrent[F].raiseError(e)
+            }
+          }
+        }
 
 //      private def release(leak: Leak[F, A]): F[Unit] = //???
 //        cache.take.flatMap { q =>
