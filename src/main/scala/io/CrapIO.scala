@@ -26,6 +26,12 @@ object CrapIO {
   def async[A](cb: (Either[Throwable, A] => Unit) => Unit): CrapIO[A] =
     Async(cb)
 
+  def asyncF[A](cb: (Either[Throwable, A] => Unit) => CrapIO[Unit]): CrapIO[A] = {
+    Async {
+      (x: Either[Throwable, A] => Unit) => CrapIO(CrapIOLoopStuff.runLoopEither(cb(x), (x: Either[Throwable, Unit]) => ()))
+    }
+  }
+
   //semantic blocking example...
   def never: CrapIO[Unit] = CrapIO.async(_ => ())
 
@@ -43,3 +49,4 @@ case class Delay[A](a: () => A) extends CrapIO[A]
 case class Map[A, B](cio: CrapIO[A], f: A => B) extends CrapIO[B]
 case class Bind[A, B](cio: CrapIO[A], f: A => CrapIO[B]) extends CrapIO[B]
 case class Async[A](cb: (Either[Throwable, A] => Unit) => Unit) extends CrapIO[A]
+case class RaiseError[A](e: Throwable) extends CrapIO[A]

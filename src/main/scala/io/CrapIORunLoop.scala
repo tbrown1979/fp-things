@@ -1,5 +1,7 @@
 package com.tbrown.io
 
+import scala.util.control.NonFatal
+
 object CrapIOLoopStuff {
   import Utils._
 
@@ -23,8 +25,13 @@ object CrapIOLoopStuff {
           }
 
         case Delay(f) =>
-          if (firstBind.isEmpty)
-            cb(Right(f().asInstanceOf[A]))
+          if (firstBind.isEmpty) {
+            try {
+              cb(Right(f().asInstanceOf[A]))
+            } catch {
+              case NonFatal(t) => cb(Left(t))
+            }
+          }
           else {
             val bind = firstBind.get
             loop(bind(f()), mapStack.headOption, mapStack.drop(1), cb)
@@ -47,6 +54,9 @@ object CrapIOLoopStuff {
               loop(CrapIO(weird), firstBind, mapStack, cb)
             }
           }
+
+        case RaiseError(e) =>
+          cb(Left(e))
       }
     }
 
